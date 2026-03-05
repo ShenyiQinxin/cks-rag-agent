@@ -1,0 +1,11 @@
+cat > .gitignore << EOF
+.env
+.venv/
+data/raw/
+*.pyc
+__pycache__/
+chroma_db/
+faiss_index/
+*.pdf
+*.docx
+EOF
