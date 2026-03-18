@@ -1,11 +1,15 @@
-cat > .gitignore << EOF
 .env
 .venv/
-data/raw/
+data/
 *.pyc
 __pycache__/
 chroma_db/
 faiss_index/
 *.pdf
 *.docx
-EOF
+.claude
+.cursor
+.pytest_cache/
+.data/
+output/
+.DS_Store

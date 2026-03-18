@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKS Architect Design Agent</title>
+<style>
+  :root {
+    --bg:       #FFFFFF;
+    --surface:  #FFFFFF;
+    --canvas-bg:#F8F9FC;
+    --border:   #DDE1E7;
+    --text-pri: #37474F;
+    --text-sec: #78909C;
+
+    /* palette from IDE screenshot */
+    --amber:    #F9A825; --amber-bg:  #FFFDE7;
+    --teal:     #00ACC1; --teal-bg:   #E0F7FA;
+    --coral:    #EF5350; --coral-bg:  #FFEBEE;
+    --pink:     #D81B60; --pink-bg:   #FCE4EC;
+    --sky:      #42A5F5; --sky-bg:    #E3F2FD;
+    --lime:     #7CB342; --lime-bg:   #F1F8E9;
+    --crimson:  #E91E63; --crimson-bg:#FCE4EC;
+    --purple:   #8E24AA; --purple-bg: #F3E5F5;
+
+    --active-ring: #42A5F5;
+    --done-ring:   #7CB342;
+    --arrow-idle:  #B0BEC5;
+    --arrow-active:#42A5F5;
+    --arrow-done:  #7CB342;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Roboto','Segoe UI',system-ui,sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 28px 16px;
+  }
+
+  h1 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--sky);
+    letter-spacing: 0.06em;
+    margin-bottom: 3px;
+    text-align: center;
+  }
+  .subtitle {
+    font-size: 0.67rem;
+    color: var(--text-sec);
+    margin-bottom: 28px;
+    text-align: center;
+    letter-spacing: 0.03em;
+    font-family: 'SF Mono','Fira Code',monospace;
+  }
+
+  .canvas {
+    position: relative;
+    width: 920px;
+    max-width: 100%;
+    height: 560px;
+    background: var(--canvas-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+
+  /* ── nodes ── */
+  .node {
+    position: absolute;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8px 12px;
+    opacity: 0;
+    transform: scale(0.88);
+    transition: opacity 0.32s ease, transform 0.32s ease,
+                box-shadow 0.28s ease, border-color 0.28s ease;
+  }
+  .node.visible { opacity: 1; transform: scale(1); }
+  .node.active  { box-shadow: 0 0 0 2.5px var(--active-ring), 0 4px 16px rgba(66,165,245,0.22); }
+  .node.done    { box-shadow: 0 0 0 2px var(--done-ring),   0 2px 8px  rgba(124,179,66,0.18); }
+
+  .lbl  { font-weight: 700; font-size: 0.72rem; line-height: 1.3; }
+  .sub  { font-size: 0.60rem; margin-top: 2px; font-family: 'SF Mono','Fira Code',monospace; }
+
+  /* colour variants */
+  .sky    { background: var(--sky-bg);    border-color: #90CAF9; }
+  .sky    .lbl { color: #1565C0; } .sky    .sub { color: #5C8CB8; }
+
+  .teal   { background: var(--teal-bg);   border-color: #80DEEA; }
+  .teal   .lbl { color: #00838F; } .teal   .sub { color: #5C9FA5; }
+
+  .pink   { background: var(--pink-bg);   border-color: #F48FB1; }
+  .pink   .lbl { color: #880E4F; } .pink   .sub { color: #9E5070; }
+
+  .lime   { background: var(--lime-bg);   border-color: #C5E1A5; }
+  .lime   .lbl { color: #33691E; } .lime   .sub { color: #557A35; }
+
+  .amber  { background: var(--amber-bg);  border-color: #FFE082; }
+  .amber  .lbl { color: #E65100; } .amber  .sub { color: #A06030; }
+
+  .purple { background: var(--purple-bg); border-color: #CE93D8; }
+  .purple .lbl { color: #6A1B9A; } .purple .sub { color: #7E4E9A; }
+
+  /* ── arrows layer ── */
+  .arrows {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .ap {
+    fill: none;
+    stroke: var(--arrow-idle);
+    stroke-width: 1.6;
+    stroke-dasharray: 5 4;
+    opacity: 0;
+    transition: opacity 0.35s, stroke 0.28s, stroke-dasharray 0.28s, stroke-width 0.28s;
+  }
+  .ap.visible { opacity: 1; }
+  .ap.active  { stroke: var(--arrow-active); stroke-dasharray: none; stroke-width: 2; }
+  .ap.done    { stroke: var(--arrow-done);   stroke-dasharray: none; }
+
+  /* ── step label ── */
+  .step-label {
+    margin-top: 20px;
+    font-size: 0.76rem;
+    color: var(--text-sec);
+    height: 1.4em;
+    text-align: center;
+  }
+  .step-label span { color: var(--sky); font-weight: 600; }
+
+  .replay-btn {
+    margin-top: 14px;
+    padding: 7px 22px;
+    border-radius: 6px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text-pri);
+    font-family: inherit;
+    font-size: 0.70rem;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    opacity: 0;
+    transition: opacity 0.4s 0.2s, border-color 0.2s, color 0.2s;
+  }
+  .replay-btn:hover { border-color: var(--sky); color: var(--sky); }
+  .replay-btn.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<h1>CKS Architect Design Agent</h1>
+<p class="subtitle">RAG · LangGraph ReAct · FAISS · Llama 3.2 · Local-first</p>
+
+<div class="canvas" id="canvas">
+
+  <!-- ── group outlines (SVG, behind everything) ── -->
+  <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;" viewBox="0 0 920 560">
+    <!-- Agent group -->
+    <rect x="172" y="46" width="540" height="478" rx="10"
+          fill="#EBF5FF" fill-opacity="0.55"
+          stroke="#90CAF9" stroke-width="1.2" stroke-dasharray="6 4"/>
+    <text x="182" y="63" font-family="Roboto,sans-serif" font-size="8.5"
+          font-weight="700" fill="#1565C0" letter-spacing="1.2" opacity="0.75">LANGGRAPH REACT AGENT</text>
+
+    <!-- RAG group -->
+    <rect x="430" y="138" width="262" height="336" rx="8"
+          fill="#E0F7FA" fill-opacity="0.45"
+          stroke="#80DEEA" stroke-width="1.2" stroke-dasharray="5 3"/>
+    <text x="440" y="154" font-family="Roboto,sans-serif" font-size="8.5"
+          font-weight="700" fill="#00838F" letter-spacing="1.2" opacity="0.75">RAG PIPELINE</text>
+  </svg>
+
+  <!--
+    Node geometry reference (left, top, w, h):
+      n-query  : 14,  228, 132, 62   center=(80,259)   right=(146,259)
+      n-agent  : 262,  64, 156, 58   center=(340, 93)  bottom=(340,122) left=(262,93)
+      n-t1     : 198, 158, 188, 50   center=(292,183)  right=(386,183)  top=(292,158)
+      n-t2     : 198, 222, 188, 50   center=(292,247)  right=(386,247)  top=(292,222)
+      n-t3     : 198, 286, 188, 50   center=(292,311)  right=(386,311)  top=(292,286)
+      n-t4     : 198, 350, 188, 50   center=(292,375)  right=(386,375)  top=(292,350)
+      n-faiss  : 444, 172, 126, 54   center=(507,199)  left=(444,199)   bottom=(507,226)
+      n-embed  : 444, 298, 126, 54   center=(507,325)  left=(444,325)   top=(507,298) bottom=(507,352)
+      n-pdf    : 614, 236, 144, 58   center=(686,265)  left=(614,265)
+      n-llm    : 456,  64, 132, 58   center=(522, 93)  left=(456, 93)   right=(588,93) bottom=(522,122)
+      n-out    : 638,  64, 148, 58   center=(712, 93)  left=(638, 93)
+      n-ls     : 282, 450, 196, 50   center=(380,475)  top=(380,450)    right=(478,475)
+  -->
+
+  <!-- ── nodes ── -->
+  <div class="node sky"    id="n-query" style="left:14px;  top:228px; width:132px; height:62px;">
+    <div class="lbl">User Query</div><div class="sub">natural language</div>
+  </div>
+  <div class="node sky"    id="n-agent" style="left:262px; top:64px;  width:156px; height:58px;">
+    <div class="lbl">Reasoning Loop</div><div class="sub">MemorySaver · session</div>
+  </div>
+
+  <!-- 4 tools — stacked -->
+  <div class="node pink"   id="n-t1"   style="left:198px; top:158px; width:188px; height:50px;">
+    <div class="lbl">generate_diagram</div><div class="sub">→ Mermaid graph TD</div>
+  </div>
+  <div class="node pink"   id="n-t2"   style="left:198px; top:222px; width:188px; height:50px;">
+    <div class="lbl">generate_checklist</div><div class="sub">→ Markdown table</div>
+  </div>
+  <div class="node pink"   id="n-t3"   style="left:198px; top:286px; width:188px; height:50px;">
+    <div class="lbl">generate_threat_model</div><div class="sub">→ Mermaid sequenceDiagram</div>
+  </div>
+  <div class="node pink"   id="n-t4"   style="left:198px; top:350px; width:188px; height:50px;">
+    <div class="lbl">analyze_manifest</div><div class="sub">→ YAML risks/controls</div>
+  </div>
+
+  <!-- RAG -->
+  <div class="node teal"   id="n-faiss" style="left:444px; top:172px; width:126px; height:54px;">
+    <div class="lbl">FAISS</div><div class="sub">409 chunks · k=4</div>
+  </div>
+  <div class="node teal"   id="n-embed" style="left:444px; top:298px; width:126px; height:54px;">
+    <div class="lbl">MiniLM Embeddings</div><div class="sub">all-MiniLM-L6-v2</div>
+  </div>
+  <div class="node lime"   id="n-pdf"   style="left:614px; top:236px; width:144px; height:58px;">
+    <div class="lbl">CKS Lab PDF</div><div class="sub">LFS260 · 409 chunks</div>
+  </div>
+
+  <!-- LLM + Output -->
+  <div class="node amber"  id="n-llm"   style="left:456px; top:64px;  width:132px; height:58px;">
+    <div class="lbl">Llama 3.2</div><div class="sub">Ollama · temp=0</div>
+  </div>
+  <div class="node lime"   id="n-out"   style="left:638px; top:64px;  width:148px; height:58px;">
+    <div class="lbl">Structured Output</div><div class="sub">Mermaid / Markdown</div>
+  </div>
+
+  <!-- LangSmith -->
+  <div class="node purple" id="n-ls"    style="left:282px; top:450px; width:196px; height:50px;">
+    <div class="lbl">LangSmith Tracing</div><div class="sub">observability · every step</div>
+  </div>
+
+  <!-- ── arrows ── -->
+  <svg class="arrows" viewBox="0 0 920 560" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="m0" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+        <path d="M0,0 L0,7 L7,3.5z" fill="var(--arrow-idle)"/>
+      </marker>
+      <marker id="m1" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+        <path d="M0,0 L0,7 L7,3.5z" fill="var(--arrow-active)"/>
+      </marker>
+      <marker id="m2" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+        <path d="M0,0 L0,7 L7,3.5z" fill="var(--arrow-done)"/>
+      </marker>
+    </defs>
+
+    <!--
+      Orthogonal routing — every path turns OUTSIDE node bounding boxes.
+      Tools occupy x=198–386, y=158–400.
+      Left corridor: x≤141. Corners: 8px quadratic radius.
+    -->
+
+    <!-- query right(146,259) → up to y=101 → turn → agent left(262,93) -->
+    <path id="a-qa"  class="ap" marker-end="url(#m0)"
+          d="M146,259 L146,101 Q146,93 154,93 L262,93"/>
+
+    <!-- agent bottom → t1 top: same x-band, no routing needed -->
+    <path id="a-at1" class="ap" marker-end="url(#m0)"
+          d="M330,122 C328,140 308,156 292,158"/>
+
+    <!-- agent(300,122) → lane x=191 → down → t2 left(198,247) -->
+    <path id="a-at2" class="ap" marker-end="url(#m0)"
+          d="M300,122 L199,122 Q191,122 191,130 L191,239 Q191,247 199,247"/>
+
+    <!-- agent(290,122) → lane x=185 → down → t3 left(198,311) -->
+    <path id="a-at3" class="ap" marker-end="url(#m0)"
+          d="M290,122 L193,122 Q185,122 185,130 L185,303 Q185,311 193,311 L198,311"/>
+
+    <!-- agent(280,122) → lane x=179 → down → t4 left(198,375) -->
+    <path id="a-at4" class="ap" marker-end="url(#m0)"
+          d="M280,122 L187,122 Q179,122 179,130 L179,367 Q179,375 187,375 L198,375"/>
+
+    <!-- tools → faiss: 4 arrows fanning into faiss left edge (y=192..215) -->
+    <path id="a-tf"  class="ap" marker-end="url(#m0)" d="M386,183 C412,183 430,190 444,192"/>
+    <path id="a-t2f" class="ap" marker-end="url(#m0)" d="M386,247 C415,247 432,208 444,199"/>
+    <path id="a-t3f" class="ap" marker-end="url(#m0)" d="M386,311 C418,311 434,218 444,207"/>
+    <path id="a-t4f" class="ap" marker-end="url(#m0)" d="M386,375 C420,375 436,225 444,215"/>
+
+    <!-- faiss bottom(507,226) → embed top(507,298) -->
+    <path id="a-fe"  class="ap" marker-end="url(#m0)"
+          d="M507,226 L507,298"/>
+
+    <!-- embed right(570,325) → pdf left(614,265) -->
+    <path id="a-ep"  class="ap" marker-end="url(#m0)"
+          d="M570,325 C594,325 606,278 614,265"/>
+
+    <!-- tools → llm: 4 arrows curving above faiss, fanning into llm left edge (y=82..106) -->
+    <path id="a-tl"  class="ap" marker-end="url(#m0)" d="M386,165 C416,140 440,105 456,82"/>
+    <path id="a-t2l" class="ap" marker-end="url(#m0)" d="M386,247 C416,175 440,124 456,90"/>
+    <path id="a-t3l" class="ap" marker-end="url(#m0)" d="M386,311 C418,205 442,130 456,98"/>
+    <path id="a-t4l" class="ap" marker-end="url(#m0)" d="M386,375 C420,220 444,130 456,106"/>
+
+    <!-- llm right(588,93) → out left(638,93) -->
+    <path id="a-lo"  class="ap" marker-end="url(#m0)"
+          d="M588,93 L638,93"/>
+
+    <!-- agent(262,93) → lane x=173 → down → langsmith left(282,450) -->
+    <path id="a-als" class="ap" marker-end="url(#m0)"
+          d="M262,93 L181,93 Q173,93 173,101 L173,442 Q173,450 181,450 L282,450"/>
+
+    <!-- embed bottom(507,352) → down → langsmith right(478,450) -->
+    <path id="a-rls" class="ap" marker-end="url(#m0)"
+          d="M507,352 L507,442 Q507,450 499,450 L478,450"/>
+  </svg>
+
+</div>
+
+<div class="step-label" id="step-label"></div>
+<button class="replay-btn" id="replay-btn" onclick="replay()">↺ replay</button>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const steps = [
+  {
+    label: 'User sends a natural language query',
+    nodes: ['n-query'], arrows: [], ms: 800,
+  },
+  {
+    label: '<span>LangGraph ReAct</span> agent receives query and starts reasoning',
+    nodes: ['n-agent'], arrows: ['a-qa'], ms: 1200,
+  },
+
+  // ── Tool 1 cycle ──
+  {
+    label: '<span>generate_diagram</span> retrieves context from FAISS (k=4)',
+    nodes: ['n-t1','n-faiss','n-embed','n-pdf'], arrows: ['a-at1','a-tf','a-fe','a-ep'], ms: 800,
+  },
+  {
+    label: '<span>generate_diagram</span> → Llama 3.2 → Mermaid graph TD',
+    nodes: ['n-llm','n-out'], arrows: ['a-tl','a-lo'], ms: 900,
+  },
+
+  // ── Tool 2 cycle ──
+  {
+    label: '<span>generate_checklist</span> retrieves context from FAISS (k=4)',
+    nodes: ['n-t2','n-faiss','n-embed','n-pdf'], arrows: ['a-at2','a-t2f','a-fe','a-ep'], ms: 800,
+  },
+  {
+    label: '<span>generate_checklist</span> → Llama 3.2 → Markdown hardening table',
+    nodes: ['n-llm','n-out'], arrows: ['a-t2l','a-lo'], ms: 900,
+  },
+
+  // ── Tool 3 cycle ──
+  {
+    label: '<span>generate_threat_model</span> retrieves context from FAISS (k=4)',
+    nodes: ['n-t3','n-faiss','n-embed','n-pdf'], arrows: ['a-at3','a-t3f','a-fe','a-ep'], ms: 800,
+  },
+  {
+    label: '<span>generate_threat_model</span> → Llama 3.2 → STRIDE sequence diagram',
+    nodes: ['n-llm','n-out'], arrows: ['a-t3l','a-lo'], ms: 900,
+  },
+
+  // ── Tool 4 cycle ──
+  {
+    label: '<span>analyze_manifest</span> retrieves context from FAISS (k=4)',
+    nodes: ['n-t4','n-faiss','n-embed','n-pdf'], arrows: ['a-at4','a-t4f','a-fe','a-ep'], ms: 800,
+  },
+  {
+    label: '<span>analyze_manifest</span> → Llama 3.2 → YAML risks and mitigations',
+    nodes: ['n-llm','n-out'], arrows: ['a-t4l','a-lo'], ms: 1200,
+  },
+
+  // ── Observability ──
+  {
+    label: '<span>LangSmith</span> traces every reasoning step end-to-end',
+    nodes: ['n-ls'], arrows: ['a-als','a-rls'],
+  },
+];
+
+const allNodes  = ['n-query','n-agent','n-t1','n-t2','n-t3','n-t4','n-faiss','n-embed','n-pdf','n-llm','n-out','n-ls'];
+const allArrows = ['a-qa','a-at1','a-at2','a-at3','a-at4','a-tf','a-t2f','a-t3f','a-t4f','a-fe','a-ep','a-tl','a-t2l','a-t3l','a-t4l','a-lo','a-als','a-rls'];
+
+let timer;
+
+function setArrow(id, state) {
+  const el = $(id); if (!el) return;
+  el.classList.remove('active','done');
+  el.classList.add('visible', state);
+  el.setAttribute('marker-end', state === 'active' ? 'url(#m1)' : 'url(#m2)');
+}
+
+function runStep(i) {
+  if (i >= steps.length) {
+    $('step-label').innerHTML = 'All systems connected ✓';
+    $('replay-btn').classList.add('visible');
+    return;
+  }
+
+  const s = steps[i];
+  $('step-label').innerHTML = s.label;
+
+  if (i > 0) {
+    const prev = steps[i - 1];
+    // only mark prev nodes/arrows done if they are NOT reused in this step
+    prev.nodes.forEach(id => {
+      if (!s.nodes.includes(id)) {
+        $(id).classList.remove('active');
+        $(id).classList.add('done');
+      }
+    });
+    prev.arrows.forEach(id => {
+      if (!s.arrows.includes(id)) setArrow(id, 'done');
+    });
+  }
+
+  // activate current — remove 'done' first in case node is being re-used
+  s.nodes.forEach(id => {
+    const el = $(id);
+    el.classList.remove('done');
+    el.classList.add('visible', 'active');
+  });
+  s.arrows.forEach(id => setArrow(id, 'active'));
+
+  timer = setTimeout(() => runStep(i + 1), s.ms ?? 1500);
+}
+
+function replay() {
+  clearTimeout(timer);
+  $('replay-btn').classList.remove('visible');
+  $('step-label').innerHTML = '';
+  allNodes.forEach(id => $(id).classList.remove('visible','active','done'));
+  allArrows.forEach(id => {
+    const el = $(id); if (!el) return;
+    el.classList.remove('visible','active','done');
+    el.setAttribute('marker-end', 'url(#m0)');
+  });
+  setTimeout(() => runStep(0), 380);
+}
+
+window.addEventListener('load', () => setTimeout(() => runStep(0), 500));
+</script>
+</body>
+</html>
