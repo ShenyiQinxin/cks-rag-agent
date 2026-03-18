@@ -1,35 +1,13 @@
 # CKS Architect Design Agent
 
-A RAG-powered agent that generates Kubernetes security artifacts — architecture diagrams, hardening checklists, and threat models — grounded in CKS lab documentation.
+A RAG-powered agent that generates Kubernetes security artifacts, architecture diagrams, hardening checklists, and threat models, grounded in CKS lab documentation.
 
 Mar 27, 2026.
 
 ---
 
 ## Architecture
-
-```mermaid
-flowchart TD
-    Q[User Query] --> A
-
-    subgraph Agent ["LangGraph ReAct Agent (MemorySaver)"]
-        A[Reasoning Loop] --> T1[generate_diagram]
-        A --> T2[generate_checklist]
-        A --> T3[generate_threat_model]
-        A --> T4[analyze_manifest]
-    end
-
-    subgraph RAG ["RAG Pipeline"]
-        T1 & T2 & T3 & T4 --> R[FAISS VectorStore]
-        R --> E[HuggingFace MiniLM\nall-MiniLM-L6-v2]
-        E --> P[CKS Lab PDF\n409 chunks]
-    end
-
-    T1 & T2 & T3 & T4 --> L[Ollama Llama 3.2]
-    L --> O[Structured Output\nMermaid / Markdown]
-
-    Agent & RAG --> LS[LangSmith Tracing]
-```
+![Architecture](demo/architecture.png)
 
 ---
 
